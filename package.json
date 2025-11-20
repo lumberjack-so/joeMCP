@@ -3,16 +3,16 @@
   "version": "1.0.0",
   "description": "MCP server for JoeAPI construction management - connects to any JoeAPI instance",
   "type": "module",
+  "module": "src/index.ts",
   "main": "build/index.js",
   "bin": {
     "joemcp": "build/index.js"
   },
   "scripts": {
-    "build": "tsc",
-    "prepare": "npm run build",
-    "watch": "tsc --watch",
-    "dev": "tsx src/index.ts",
-    "start": "node build/index.js"
+    "build": "npx smithery build",
+    "dev": "npx smithery dev",
+    "local": "tsx src/index.ts",
+    "compile": "tsc"
   },
   "keywords": [
     "mcp",
@@ -29,6 +29,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@smithery/cli": "^1.4.6",
     "@types/node": "^24.10.1",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"
