@@ -16,6 +16,25 @@ export const configSchema = z.object({
     .string()
     .url()
     .describe('Base URL of your JoeAPI instance (e.g., https://joeapi.fly.dev)'),
+  DEFAULT_PAGE_LIMIT: z
+    .number()
+    .min(1)
+    .max(100)
+    .default(5)
+    .optional()
+    .describe('Default number of items to return in paginated requests (1-100)'),
+  REQUEST_TIMEOUT: z
+    .number()
+    .min(1000)
+    .max(60000)
+    .default(30000)
+    .optional()
+    .describe('Request timeout in milliseconds (1000-60000)'),
+  DEBUG_MODE: z
+    .boolean()
+    .default(false)
+    .optional()
+    .describe('Enable detailed error logging and debugging information'),
 });
 
 // Helper to handle API requests
@@ -91,36 +110,39 @@ async function makeRequest(
 // Export default createServer function for Smithery
 export default function createServer({ config }: { config: z.infer<typeof configSchema> }) {
   const API_BASE_URL = config.JOEAPI_BASE_URL;
+  const DEFAULT_LIMIT = config.DEFAULT_PAGE_LIMIT || 5;
+  const TIMEOUT = config.REQUEST_TIMEOUT || 30000;
+  const DEBUG = config.DEBUG_MODE || false;
 
   // Create MCP Server
   const server = new McpServer({
-    name: 'joe-api-server',
+    name: 'JoeAPI MCP Server',
     version: '1.0.0',
   });
 
   // Register tools
   server.registerTool('list_clients', {
     title: 'List Clients',
-    description: 'Retrieve a paginated list of clients',
+    description: 'Retrieve a paginated list of all clients in the JoeAPI system. Returns basic client information including name, email, company, and contact details.',
     inputSchema: {
-      page: z.number().optional().describe('Page number (default: 1)'),
-      limit: z.number().optional().describe('Items per page (default: 5, max: 100)'),
+      page: z.number().min(1).optional().describe('Page number for pagination (starts at 1)'),
+      limit: z.number().min(1).max(100).optional().describe(`Number of items per page (max: 100, default: ${DEFAULT_LIMIT})`),
     },
   }, async ({ page, limit }) => {
     return makeRequest(API_BASE_URL, 'GET', '/clients', null, {
       page: page || 1,
-      limit: limit || 5,
+      limit: limit || DEFAULT_LIMIT,
     });
   });
 
   server.registerTool('create_client', {
     title: 'Create Client',
-    description: 'Create a new client record',
+    description: 'Create a new client record in the JoeAPI system. Use this when onboarding new clients for construction projects.',
     inputSchema: {
-      Name: z.string().describe('Client name'),
-      EmailAddress: z.string().describe('Client email address'),
-      CompanyName: z.string().describe('Company name'),
-      Phone: z.string().describe('Phone number'),
+      Name: z.string().min(1).describe('Full name of the client'),
+      EmailAddress: z.string().email().describe('Primary email address for the client'),
+      CompanyName: z.string().min(1).describe('Name of the client\'s company or organization'),
+      Phone: z.string().describe('Primary phone number (e.g., +1-555-123-4567)'),
     },
   }, async (args) => {
     return makeRequest(API_BASE_URL, 'POST', '/clients', args);
@@ -128,23 +150,23 @@ export default function createServer({ config }: { config: z.infer<typeof config
 
   server.registerTool('list_contacts', {
     title: 'List Contacts',
-    description: 'Retrieve a list of contacts',
+    description: 'Retrieve a list of all contacts in the system. Contacts are individuals associated with projects or clients.',
     inputSchema: {
-      limit: z.number().optional().describe('Items per page (default: 5)'),
+      limit: z.number().min(1).max(100).optional().describe(`Maximum number of contacts to return (default: ${DEFAULT_LIMIT})`),
     },
   }, async ({ limit }) => {
-    return makeRequest(API_BASE_URL, 'GET', '/contacts', null, { limit: limit || 5 });
+    return makeRequest(API_BASE_URL, 'GET', '/contacts', null, { limit: limit || DEFAULT_LIMIT });
   });
 
   server.registerTool('create_contact', {
     title: 'Create Contact',
-    description: 'Create a new contact',
+    description: 'Create a new contact in the system. Contacts can be associated with clients, projects, or other entities.',
     inputSchema: {
-      Name: z.string().describe('Contact name'),
-      Email: z.string().describe('Email address'),
-      Phone: z.string().describe('Phone number'),
-      City: z.string().optional().describe('City'),
-      State: z.string().optional().describe('State'),
+      Name: z.string().min(1).describe('Full name of the contact person'),
+      Email: z.string().email().describe('Email address for the contact'),
+      Phone: z.string().describe('Phone number for the contact'),
+      City: z.string().optional().describe('City where the contact is located'),
+      State: z.string().optional().describe('State or province (e.g., CA, NY)'),
     },
   }, async (args) => {
     return makeRequest(API_BASE_URL, 'POST', '/contacts', args);
@@ -157,7 +179,7 @@ export default function createServer({ config }: { config: z.infer<typeof config
       limit: z.number().optional().describe('Items per page (default: 5)'),
     },
   }, async ({ limit }) => {
-    return makeRequest(API_BASE_URL, 'GET', '/proposals', null, { limit: limit || 5 });
+    return makeRequest(API_BASE_URL, 'GET', '/proposals', null, { limit: limit || DEFAULT_LIMIT });
   });
 
   server.registerTool('get_proposal_details', {
@@ -196,7 +218,7 @@ export default function createServer({ config }: { config: z.infer<typeof config
       limit: z.number().optional().describe('Items per page (default: 5)'),
     },
   }, async ({ limit }) => {
-    return makeRequest(API_BASE_URL, 'GET', '/estimates', null, { limit: limit || 5 });
+    return makeRequest(API_BASE_URL, 'GET', '/estimates', null, { limit: limit || DEFAULT_LIMIT });
   });
 
   server.registerTool('list_action_items', {
@@ -209,36 +231,38 @@ export default function createServer({ config }: { config: z.infer<typeof config
   }, async ({ projectId, limit }) => {
     return makeRequest(API_BASE_URL, 'GET', '/action-items', null, {
       projectId,
-      limit: limit || 5,
+      limit: limit || DEFAULT_LIMIT,
     });
   });
 
   server.registerTool('create_action_item', {
     title: 'Create Action Item',
-    description: 'Create a new Action Item',
+    description: 'Create a new action item for a construction project. Action items can track cost changes, schedule changes, or general tasks. Include CostChange object for type 1, ScheduleChange object for type 2.',
     inputSchema: {
-      Title: z.string().describe('Action item title'),
-      Description: z.string().describe('Action item description'),
-      ProjectId: z.string().describe('UUID of the project'),
-      ActionTypeId: z.number().describe('1=CostChange, 2=ScheduleChange, 3=Generic'),
-      DueDate: z.string().describe('ISO Date YYYY-MM-DD'),
-      Status: z.number().optional().describe('Status code (default: 1)'),
-      Source: z.number().optional().describe('Source code (default: 1)'),
-      InitialComment: z.string().optional().describe('Initial comment'),
+      Title: z.string().min(1).describe('Brief title summarizing the action item'),
+      Description: z.string().min(1).describe('Detailed description of the action item'),
+      ProjectId: z.string().uuid().describe('UUID of the project this action item belongs to'),
+      ActionTypeId: z.number().int().min(1).max(3).describe('Type of action: 1=CostChange, 2=ScheduleChange, 3=Generic'),
+      DueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe('Due date in ISO format (YYYY-MM-DD)'),
+      Status: z.number().int().optional().describe('Status code (default: 1)'),
+      Source: z.number().int().optional().describe('Source identifier (default: 1)'),
+      InitialComment: z.string().optional().describe('Optional initial comment or note'),
       CostChange: z
         .object({
-          Amount: z.number(),
-          EstimateCategoryId: z.string(),
-          RequiresClientApproval: z.boolean(),
+          Amount: z.number().describe('Cost change amount (positive or negative)'),
+          EstimateCategoryId: z.string().uuid().describe('UUID of the estimate category'),
+          RequiresClientApproval: z.boolean().describe('Whether this cost change requires client approval'),
         })
-        .optional(),
+        .optional()
+        .describe('Required when ActionTypeId is 1 (CostChange)'),
       ScheduleChange: z
         .object({
-          NoOfDays: z.number(),
-          ConstructionTaskId: z.string(),
-          RequiresClientApproval: z.boolean(),
+          NoOfDays: z.number().int().describe('Number of days to adjust schedule (positive or negative)'),
+          ConstructionTaskId: z.string().uuid().describe('UUID of the construction task affected'),
+          RequiresClientApproval: z.boolean().describe('Whether this schedule change requires client approval'),
         })
-        .optional(),
+        .optional()
+        .describe('Required when ActionTypeId is 2 (ScheduleChange)'),
     },
   }, async (args) => {
     return makeRequest(API_BASE_URL, 'POST', '/action-items', args);
@@ -287,7 +311,7 @@ export default function createServer({ config }: { config: z.infer<typeof config
       limit: z.number().optional().describe('Items per page (default: 5)'),
     },
   }, async ({ limit }) => {
-    return makeRequest(API_BASE_URL, 'GET', '/project-schedules', null, { limit: limit || 5 });
+    return makeRequest(API_BASE_URL, 'GET', '/project-schedules', null, { limit: limit || DEFAULT_LIMIT });
   });
 
   server.registerTool('get_financial_summary', {

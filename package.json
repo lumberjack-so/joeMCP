@@ -1,6 +1,6 @@
 {
   "name": "@ssdavidai/joemcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP server for JoeAPI construction management - connects to any JoeAPI instance",
   "type": "module",
   "module": "src/index.ts",
@@ -16,12 +16,29 @@
   },
   "keywords": [
     "mcp",
+    "model-context-protocol",
     "construction",
+    "construction-management",
+    "joeapi",
     "api",
-    "joe",
-    "smithery"
+    "smithery",
+    "project-management",
+    "proposals",
+    "estimates",
+    "action-items"
   ],
-  "author": "ssdavidai",
+  "author": {
+    "name": "ssdavidai",
+    "url": "https://github.com/ssdavidai"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lumberjack-so/joeMCP.git"
+  },
+  "homepage": "https://github.com/lumberjack-so/joeMCP#readme",
+  "bugs": {
+    "url": "https://github.com/lumberjack-so/joeMCP/issues"
+  },
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.21.1",
