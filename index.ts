@@ -286,7 +286,13 @@ export default function createServer({ config }: { config: z.infer<typeof config
       },
     },
     async (args) => {
-      return makeRequest('POST', '/action-items', args);
+      // Always ensure Status and Source are set to 1 if not provided
+      const payload = {
+        ...args,
+        Status: args.Status ?? 1,
+        Source: args.Source ?? 1,
+      };
+      return makeRequest('POST', '/action-items', payload);
     }
   );
 
