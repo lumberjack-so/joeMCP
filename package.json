@@ -5,7 +5,7 @@
   "type": "module",
   "main": "build/index.js",
   "bin": {
-    "joemcp": "./build/index.js"
+    "joemcp": "build/index.js"
   },
   "scripts": {
     "build": "tsc",
