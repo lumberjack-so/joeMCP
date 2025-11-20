@@ -1,0 +1,18 @@
+{
+  "name": "@ssdavidai/joemcp",
+  "version": "1.0.0",
+  "description": "MCP server for JoeAPI construction management",
+  "author": "ssdavidai",
+  "homepage": "https://github.com/ssdavidai/joemcp",
+  "license": "MIT",
+  "runtime": "node",
+  "entrypoint": "build/index.js",
+  "buildCommand": "npm install && npm run build",
+  "requiredEnvVars": [
+    {
+      "name": "JOEAPI_BASE_URL",
+      "description": "Base URL of your JoeAPI instance (e.g., https://joeapi.fly.dev)",
+      "required": true
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "name": "@ssdavidai/joemcp",
+  "version": "1.0.0",
+  "description": "MCP server for JoeAPI construction management - connects to any JoeAPI instance",
+  "type": "module",
+  "main": "build/index.js",
+  "bin": {
+    "joemcp": "./build/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build",
+    "watch": "tsc --watch",
+    "dev": "tsx src/index.ts",
+    "start": "node build/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "construction",
+    "api",
+    "joe",
+    "smithery"
+  ],
+  "author": "ssdavidai",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.21.1",
+    "dotenv": "^16.3.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
