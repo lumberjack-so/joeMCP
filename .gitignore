@@ -1,16 +1,7 @@
 # Dependencies
 node_modules/
-package-lock.json
 yarn.lock
 pnpm-lock.yaml
-
-# Build output
-build/
-dist/
-*.js
-*.js.map
-*.d.ts
-*.d.ts.map
 
 # Environment variables
 .env
