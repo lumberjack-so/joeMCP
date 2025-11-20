@@ -1,5 +1,7 @@
 # JoeMCP
 
+[![smithery badge](https://smithery.ai/badge/@lumberjack-so/joemcp)](https://smithery.ai/server/@lumberjack-so/joemcp)
+
 MCP (Model Context Protocol) server for JoeAPI construction management system. This server exposes JoeAPI's REST endpoints as MCP tools, allowing AI assistants to interact with your JoeAPI instance.
 
 ## Features
