@@ -5,7 +5,7 @@ MCP (Model Context Protocol) server for JoeAPI construction management system. T
 ## Features
 
 - Connect to any JoeAPI instance via environment variable
-- 17 MCP tools covering:
+- 15 MCP tools covering:
   - Clients & Contacts management
   - Proposals & Estimates
   - Action Items (with Cost/Schedule changes)
