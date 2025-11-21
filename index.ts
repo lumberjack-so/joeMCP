@@ -568,6 +568,7 @@ export default function createServer({ config }: { config: z.infer<typeof config
         const payload: any = {
           prompt: prompt,
           searchWorkflow: true,
+          async: false,
         };
 
         // Include callId if provided
