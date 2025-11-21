@@ -179,7 +179,7 @@ export default function createServer({ config }: { config: z.infer<typeof config
     'list_proposals',
     {
       title: 'List Proposals',
-      description: 'List all proposals',
+      description: 'Get a minimal list of proposals with optional project filtering. Returns only name, id, and projectId for each proposal. Use discover or search to find proposals and get full details.',
       inputSchema: {
         limit: z.number().optional().describe('Items per page (default: 5)'),
       },
@@ -192,40 +192,10 @@ export default function createServer({ config }: { config: z.infer<typeof config
   );
 
   server.registerTool(
-    'get_proposal_details',
-    {
-      title: 'Get Proposal Details',
-      description: 'Get specific proposal details including lines',
-      inputSchema: {
-        proposalId: z.string().describe('UUID of the proposal'),
-        includeLines: z.boolean().optional().describe('If true, fetches proposal lines in a separate request (default: false)'),
-      },
-    },
-    async ({ proposalId, includeLines }) => {
-      const proposal = await makeRequest('GET', `/proposals/${proposalId}`);
-
-      if (includeLines && !proposal.isError) {
-        const lines = await makeRequest('GET', '/proposallines', null, {
-          proposalId: proposalId,
-        });
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `PROPOSAL:\n${proposal.content[0].text}\n\nLINES:\n${lines.content[0].text}`,
-            },
-          ],
-        };
-      }
-      return proposal;
-    }
-  );
-
-  server.registerTool(
     'list_estimates',
     {
       title: 'List Estimates',
-      description: 'List estimates (optionally filtered by project). Note: Each estimate can be large - use small limits to avoid token overflow',
+      description: 'Get a minimal list of estimates with optional project filtering. Returns only name, id, and projectId for each estimate. Use get_estimates to retrieve full details for a specific project\'s estimates.',
       inputSchema: {
         projectId: z.string().optional().describe('UUID of project to filter by (optional - if not provided, returns estimates from all projects)'),
         limit: z.number().optional().describe('Items per page (default: 3, max: 10 to prevent token overflow)'),
@@ -251,7 +221,7 @@ export default function createServer({ config }: { config: z.infer<typeof config
     'list_action_items',
     {
       title: 'List Action Items',
-      description: 'List action items (optionally filtered by project). Use projectId filter to reduce response size',
+      description: 'Get a minimal list of action items with optional project filtering. Returns only name (title), id, and projectId for each action item. Use get_action_item to retrieve full details for a specific action item.',
       inputSchema: {
         projectId: z.string().optional().describe('UUID of project to filter by (optional - if not provided, returns action items from all projects)'),
         limit: z.number().optional().describe('Items per page (default: 3, max: 10 to prevent token overflow)'),
@@ -270,11 +240,25 @@ export default function createServer({ config }: { config: z.infer<typeof config
   );
 
   server.registerTool(
+    'get_action_item',
+    {
+      title: 'Get Action Item',
+      description: 'Get full details for a specific action item by ID',
+      inputSchema: {
+        actionItemId: z.string().describe('The GUID of the action item to retrieve'),
+      },
+    },
+    async ({ actionItemId }) => {
+      return makeRequest('GET', '/action-items', null, { actionItemId });
+    }
+  );
+
+  server.registerTool(
     'create_action_item',
     {
       title: 'Create Action Item',
       description: 'Create a new Action Item. Can be Generic (ActionTypeId=3), Cost Change (ActionTypeId=1), or Schedule Change (ActionTypeId=2). For Cost/Schedule changes, you MUST include the corresponding nested object with all required fields.',
-      inputSchema: z.object({
+      inputSchema: {
         Title: z.string().describe('Action item title'),
         Description: z.string().describe('Action item description'),
         ProjectId: z.string().describe('UUID of the project'),
@@ -293,27 +277,35 @@ export default function createServer({ config }: { config: z.infer<typeof config
           ConstructionTaskId: z.string().describe('UUID of construction task'),
           RequiresClientApproval: z.boolean().describe('Whether client approval is required'),
         }).optional().describe('Schedule change details (REQUIRED when ActionTypeId=2)'),
-      }).superRefine((data, ctx) => {
-        // Enforce CostChange when ActionTypeId=1
-        if (data.ActionTypeId === 1 && !data.CostChange) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: 'CostChange object with Amount, EstimateCategoryId, and RequiresClientApproval is REQUIRED when ActionTypeId=1',
-            path: ['CostChange'],
-          });
-        }
-
-        // Enforce ScheduleChange when ActionTypeId=2
-        if (data.ActionTypeId === 2 && !data.ScheduleChange) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: 'ScheduleChange object with NoOfDays, ConstructionTaskId, and RequiresClientApproval is REQUIRED when ActionTypeId=2',
-            path: ['ScheduleChange'],
-          });
-        }
-      }),
+      },
     },
     async (args) => {
+      // Validate CostChange when ActionTypeId=1
+      if (args.ActionTypeId === 1 && !args.CostChange) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: 'Error: CostChange object with Amount, EstimateCategoryId, and RequiresClientApproval is REQUIRED when ActionTypeId=1',
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Validate ScheduleChange when ActionTypeId=2
+      if (args.ActionTypeId === 2 && !args.ScheduleChange) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: 'Error: ScheduleChange object with NoOfDays, ConstructionTaskId, and RequiresClientApproval is REQUIRED when ActionTypeId=2',
+            },
+          ],
+          isError: true,
+        };
+      }
+
       // Always ensure Status and Source are set to 1 if not provided
       const payload = {
         ...args,
@@ -366,7 +358,7 @@ export default function createServer({ config }: { config: z.infer<typeof config
     'list_projects',
     {
       title: 'List Projects',
-      description: 'List all projects with pagination',
+      description: 'Get a minimal list of all projects. Returns only name, id, and projectId for each project. Use get_project to retrieve full details for a specific project.',
       inputSchema: {
         page: z.number().optional().describe('Page number (default: 1)'),
         limit: z.number().optional().describe('Items per page (default: 5, max: 100)'),
@@ -381,46 +373,76 @@ export default function createServer({ config }: { config: z.infer<typeof config
   );
 
   server.registerTool(
-    'get_project_details',
+    'get_project',
     {
-      title: 'Get Project Details',
-      description: 'Get full details of a project',
+      title: 'Get Project',
+      description: 'Get full project details by project ID',
       inputSchema: {
-        projectId: z.string().describe('UUID of the project'),
+        projectId: z.string().describe('The GUID of the project to retrieve'),
       },
     },
     async ({ projectId }) => {
-      return makeRequest('GET', `/project-details/${projectId}`);
+      return makeRequest('GET', '/projects', null, { projectId });
     }
   );
 
   server.registerTool(
-    'list_project_schedules',
+    'get_schedule',
     {
-      title: 'List Project Schedules',
-      description: 'List project schedules (optionally filtered by project). Use projectId filter to reduce response size',
+      title: 'Get Schedule',
+      description: 'Get full schedule data for a specific project',
       inputSchema: {
-        projectId: z.string().optional().describe('UUID of project to filter by (optional - if not provided, returns schedules from all projects)'),
-        limit: z.number().optional().describe('Items per page (default: 3, max: 10 to prevent token overflow)'),
+        projectId: z.string().describe('The GUID of the project to retrieve schedule for'),
+      },
+    },
+    async ({ projectId }) => {
+      return makeRequest('GET', '/schedules', null, { projectId });
+    }
+  );
+
+  server.registerTool(
+    'list_schedules',
+    {
+      title: 'List Schedules',
+      description: 'Get a minimal list of schedules with optional project filtering. Returns only name, id, and projectId for each schedule.',
+      inputSchema: {
+        projectId: z.string().optional().describe('Optional project GUID to filter schedules by project'),
+        limit: z.number().optional().describe('Optional limit on number of results to return'),
       },
     },
     async ({ projectId, limit }) => {
-      const cappedLimit = Math.min(limit || 3, 10);
-      const params: any = { limit: cappedLimit };
+      const params: any = {};
 
       if (projectId) {
         params.projectId = projectId;
       }
+      if (limit) {
+        params.limit = limit;
+      }
 
-      return makeRequest('GET', '/project-schedules', null, params);
+      return makeRequest('GET', '/schedules', null, params);
     }
   );
 
   server.registerTool(
-    'search',
+    'get_estimates',
     {
-      title: 'Search Projects',
-      description: 'Search for a project and get comprehensive structured data including project details, financials (estimates, estimate revisions, transactions), schedules (current and revisions), and action items - all in one unified JSON response',
+      title: 'Get Estimates',
+      description: 'Get full estimate data for a specific project',
+      inputSchema: {
+        projectId: z.string().describe('The GUID of the project to retrieve estimates for'),
+      },
+    },
+    async ({ projectId }) => {
+      return makeRequest('GET', '/estimates', null, { projectId });
+    }
+  );
+
+  server.registerTool(
+    'discover',
+    {
+      title: 'Discover Projects',
+      description: 'Discover comprehensive project data by searching for a project and retrieving all related information including project details, financials (estimates, job balances, cost variance), schedules, and action items - all in one unified JSON response',
       inputSchema: {
         query: z.string().describe('Search query to find the project (searches in project name, description, status)'),
         projectId: z.string().optional().describe('Optional: Direct project ID if already known (skips search step)'),
@@ -471,23 +493,21 @@ export default function createServer({ config }: { config: z.infer<typeof config
         }
       }
 
-      // Step 2: Fetch all project data in parallel (7 endpoints)
+      // Step 2: Fetch all project data in parallel (6 endpoints)
       const [
         projectDetails,
-        transactions,
         actionItems,
         estimates,
         schedules,
-        scheduleRevisions,
-        estimateRevisions,
+        jobBalances,
+        costVariance,
       ] = await Promise.all([
-        makeRequest('GET', `/project-details/${resolvedProjectId}`),
-        makeRequest('GET', '/transactions', null, { projectId: resolvedProjectId }),
+        makeRequest('GET', '/projects', null, { projectId: resolvedProjectId }),
         makeRequest('GET', '/action-items', null, { projectId: resolvedProjectId }),
         makeRequest('GET', '/estimates', null, { projectId: resolvedProjectId }),
         makeRequest('GET', '/schedules', null, { projectId: resolvedProjectId }),
-        makeRequest('GET', '/schedule-revisions', null, { projectId: resolvedProjectId }),
-        makeRequest('GET', '/estimates/revision-history', null, { projectId: resolvedProjectId }),
+        makeRequest('GET', '/job-balances', null, { projectId: resolvedProjectId }),
+        makeRequest('GET', '/cost-variance', null, { projectId: resolvedProjectId }),
       ]);
 
       // Step 3: Parse JSON responses and build structured object
@@ -507,13 +527,10 @@ export default function createServer({ config }: { config: z.infer<typeof config
         project: parseResponse(projectDetails),
         financials: {
           estimates: parseResponse(estimates),
-          estimateRevisionHistory: parseResponse(estimateRevisions),
-          transactions: parseResponse(transactions),
+          jobBalances: parseResponse(jobBalances),
+          costVariance: parseResponse(costVariance),
         },
-        schedules: {
-          current: parseResponse(schedules),
-          revisions: parseResponse(scheduleRevisions),
-        },
+        schedules: parseResponse(schedules),
         actionItems: parseResponse(actionItems),
       };
 
@@ -529,59 +546,7 @@ export default function createServer({ config }: { config: z.infer<typeof config
   );
 
   // ==========================================
-  // 5. FINANCIAL TOOLS
-  // ==========================================
-
-  server.registerTool(
-    'get_financial_summary',
-    {
-      title: 'Get Financial Summary',
-      description: 'Get transaction summary grouped by timeframe',
-      inputSchema: {
-        groupBy: z.enum(['month', 'year', 'week']).optional().describe('Group by: month, year, or week (default: month)'),
-        startDate: z.string().describe('Start date in YYYY-MM-DD format'),
-        endDate: z.string().describe('End date in YYYY-MM-DD format'),
-      },
-    },
-    async ({ groupBy, startDate, endDate }) => {
-      return makeRequest('GET', '/transactions/summary', null, {
-        groupBy: groupBy || 'month',
-        startDate: startDate,
-        endDate: endDate,
-      });
-    }
-  );
-
-  server.registerTool(
-    'get_project_finances',
-    {
-      title: 'Get Project Finances',
-      description: 'Get financial overview for a specific project (Job Balances and Cost Variance)',
-      inputSchema: {
-        projectId: z.string().describe('UUID of the project'),
-      },
-    },
-    async ({ projectId }) => {
-      const balances = await makeRequest('GET', '/job-balances', null, {
-        projectId: projectId,
-      });
-      const variance = await makeRequest('GET', '/cost-variance', null, {
-        projectId: projectId,
-      });
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `JOB BALANCES:\n${balances.content[0].text}\n\nCOST VARIANCE:\n${variance.content[0].text}`,
-          },
-        ],
-      };
-    }
-  );
-
-  // ==========================================
-  // 6. ASYNC AGENT TOOL
+  // 5. ASYNC AGENT TOOL
   // ==========================================
 
   server.registerTool(
@@ -673,6 +638,269 @@ export default function createServer({ config }: { config: z.infer<typeof config
           isError: true,
         };
       }
+    }
+  );
+
+  // ==========================================
+  // 6. FINANCIAL TOOLS
+  // ==========================================
+
+  server.registerTool(
+    'get_financials',
+    {
+      title: 'Get Financials',
+      description: 'Get comprehensive financial data for a project including job balances and cost variance',
+      inputSchema: {
+        projectId: z.string().describe('The GUID of the project to retrieve financial data for'),
+      },
+    },
+    async ({ projectId }) => {
+      const [jobBalancesResult, costVarianceResult] = await Promise.all([
+        makeRequest('GET', '/job-balances', null, { projectId }),
+        makeRequest('GET', '/cost-variance', null, { projectId })
+      ]);
+
+      // Check for errors in either result
+      if (jobBalancesResult.isError) {
+        return jobBalancesResult;
+      }
+      if (costVarianceResult.isError) {
+        return costVarianceResult;
+      }
+
+      return {
+        isError: false,
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            jobBalances: jobBalancesResult.content[0].text,
+            costVariance: costVarianceResult.content[0].text
+          }, null, 2)
+        }]
+      };
+    }
+  );
+
+  server.registerTool(
+    'get_transactions',
+    {
+      title: 'Get Transactions',
+      description: 'Get transaction list for a project with optional date range filtering',
+      inputSchema: {
+        projectId: z.string().describe('The GUID of the project to retrieve transactions for'),
+        startDate: z.string().optional().describe('Start date in ISO-8601 format (e.g., 2024-01-01)'),
+        endDate: z.string().optional().describe('End date in ISO-8601 format (e.g., 2024-12-31)'),
+      },
+    },
+    async ({ projectId, startDate, endDate }) => {
+      const params: Record<string, any> = { projectId };
+
+      if (startDate !== undefined) {
+        params.startDate = startDate;
+      }
+      if (endDate !== undefined) {
+        params.endDate = endDate;
+      }
+
+      return makeRequest('GET', '/transactions', null, params);
+    }
+  );
+
+  // ==========================================
+  // 7. SEARCH/FIND TOOLS
+  // ==========================================
+
+  server.registerTool(
+    'find_project',
+    {
+      title: 'Find Project',
+      description: 'Search for projects by name, client name, or other attributes. Returns matching projects with basic info.',
+      inputSchema: {
+        query: z.string().describe('Search query to find projects'),
+      },
+    },
+    async ({ query }) => {
+      return makeRequest('GET', '/search', null, {
+        q: query,
+        type: 'project'
+      });
+    }
+  );
+
+  server.registerTool(
+    'find_estimate',
+    {
+      title: 'Find Estimate',
+      description: 'Search for estimates and estimate categories. Can search across all estimates or within a specific project.',
+      inputSchema: {
+        query: z.string().describe('Search query to find estimates or categories'),
+        projectId: z.string().optional().describe('Optional project GUID to search within specific project for estimate categories'),
+      },
+    },
+    async ({ query, projectId }) => {
+      // First search (always)
+      const estimateResults = await makeRequest('GET', '/search', null, {
+        q: query,
+        type: 'estimate'
+      });
+
+      if (estimateResults.isError) {
+        return estimateResults;
+      }
+
+      // If projectId provided, do second search
+      if (projectId) {
+        const categoryResults = await makeRequest('GET', '/search', null, {
+          q: query,
+          type: 'estimateCategory',
+          projectId
+        });
+
+        if (categoryResults.isError) {
+          return categoryResults;
+        }
+
+        // Combine results
+        return {
+          isError: false,
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              estimates: JSON.parse(estimateResults.content[0].text),
+              categories: JSON.parse(categoryResults.content[0].text)
+            }, null, 2)
+          }]
+        };
+      }
+
+      // Return just estimate results if no projectId
+      return estimateResults;
+    }
+  );
+
+  server.registerTool(
+    'find_schedule',
+    {
+      title: 'Find Schedule',
+      description: 'Search for schedules and construction tasks. Can search across all schedules or within a specific project.',
+      inputSchema: {
+        query: z.string().describe('Search query to find schedules or tasks'),
+        projectId: z.string().optional().describe('Optional project GUID to search within specific project for construction tasks'),
+      },
+    },
+    async ({ query, projectId }) => {
+      // First search (always)
+      const scheduleResults = await makeRequest('GET', '/search', null, {
+        q: query,
+        type: 'schedule'
+      });
+
+      if (scheduleResults.isError) {
+        return scheduleResults;
+      }
+
+      // If projectId provided, do second search
+      if (projectId) {
+        const taskResults = await makeRequest('GET', '/search', null, {
+          q: query,
+          type: 'constructionTask',
+          projectId
+        });
+
+        if (taskResults.isError) {
+          return taskResults;
+        }
+
+        // Combine results
+        return {
+          isError: false,
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              schedules: JSON.parse(scheduleResults.content[0].text),
+              tasks: JSON.parse(taskResults.content[0].text)
+            }, null, 2)
+          }]
+        };
+      }
+
+      // Return just schedule results if no projectId
+      return scheduleResults;
+    }
+  );
+
+  server.registerTool(
+    'find_proposal',
+    {
+      title: 'Find Proposal',
+      description: 'Search for proposals by proposal number, title, or description. Can optionally filter by project.',
+      inputSchema: {
+        query: z.string().describe('Search query to find proposals'),
+        projectId: z.string().optional().describe('Optional project GUID to filter proposals by project'),
+      },
+    },
+    async ({ query, projectId }) => {
+      const params: any = {
+        q: query,
+        type: 'proposal'
+      };
+
+      // Only add projectId to params if provided
+      if (projectId) {
+        params.projectId = projectId;
+      }
+
+      return makeRequest('GET', '/search', null, params);
+    }
+  );
+
+  server.registerTool(
+    'find_action_items',
+    {
+      title: 'Find Action Items',
+      description: 'Search for action items by title or description. Can optionally filter by project.',
+      inputSchema: {
+        query: z.string().describe('Search query to find action items'),
+        projectId: z.string().optional().describe('Optional project GUID to filter action items by project'),
+      },
+    },
+    async ({ query, projectId }) => {
+      const params: any = {
+        q: query,
+        type: 'action-item'
+      };
+
+      // Only add projectId to params if provided
+      if (projectId) {
+        params.projectId = projectId;
+      }
+
+      return makeRequest('GET', '/search', null, params);
+    }
+  );
+
+  server.registerTool(
+    'search',
+    {
+      title: 'Search',
+      description: 'Generic search tool that can search across multiple entity types with optional filtering by project.',
+      inputSchema: {
+        query: z.string().describe('Search query'),
+        type: z.string().optional().describe('Entity type to search: project, estimate, schedule, proposal, estimateCategory, constructionTask, action-item'),
+        projectId: z.string().optional().describe('Optional project GUID to filter results by project'),
+      },
+    },
+    async ({ query, type, projectId }) => {
+      const params: any = { q: query };
+
+      if (type) {
+        params.type = type;
+      }
+      if (projectId) {
+        params.projectId = projectId;
+      }
+
+      return makeRequest('GET', '/search', null, params);
     }
   );
 
