@@ -556,25 +556,19 @@ export default function createServer({ config }: { config: z.infer<typeof config
       description: 'Delegate complex multi-step workflows to the async-agent system. Use this for tasks that require multiple coordinated steps, data gathering from multiple sources, or complex orchestration.',
       inputSchema: {
         prompt: z.string().describe('The task or question to send to the async-agent'),
-        callId: z.string().optional().describe('Optional call ID for tracking (if null, will be auto-generated)'),
       },
     },
-    async ({ prompt, callId }) => {
+    async ({ prompt }) => {
       const ASYNC_AGENT_BASE_URL = 'https://joeapi-async-agent.fly.dev';
       const TIMEOUT_MS = 120000; // 2 minutes
 
       try {
         // Prepare payload for async-agent
-        const payload: any = {
+        const payload = {
           prompt: prompt,
           searchWorkflow: true,
           async: false,
         };
-
-        // Include callId if provided
-        if (callId) {
-          payload.callId = callId;
-        }
 
         // Create AbortController for timeout
         const controller = new AbortController();
