@@ -546,100 +546,95 @@ export default function createServer({ config }: { config: z.infer<typeof config
   );
 
   // ==========================================
-  // 5. ASYNC AGENT TOOL (DISABLED)
+  // 5. ASYNC AGENT TOOL
   // ==========================================
 
-  // server.registerTool(
-  //   'async',
-  //   {
-  //     title: 'Async Agent',
-  //     description: 'Delegate complex multi-step workflows to the async-agent system. Use this for tasks that require multiple coordinated steps, data gathering from multiple sources, or complex orchestration.',
-  //     inputSchema: {
-  //       prompt: z.string().describe('The task or question to send to the async-agent'),
-  //       callId: z.string().optional().describe('Optional call ID for tracking (if null, will be auto-generated)'),
-  //     },
-  //   },
-  //   async ({ prompt, callId }) => {
-  //     const ASYNC_AGENT_BASE_URL = 'https://joeapi-async-agent.fly.dev';
-  //     const TIMEOUT_MS = 120000; // 2 minutes
+  server.registerTool(
+    'async',
+    {
+      title: 'Async Agent',
+      description: 'Delegate complex multi-step workflows to the async-agent system. Use this for tasks that require multiple coordinated steps, data gathering from multiple sources, or complex orchestration.',
+      inputSchema: {
+        prompt: z.string().describe('The task or question to send to the async-agent'),
+      },
+    },
+    async ({ prompt }) => {
+      const ASYNC_AGENT_BASE_URL = 'https://joeapi-async-agent.fly.dev';
+      const TIMEOUT_MS = 120000; // 2 minutes
 
-  //     try {
-  //       // Prepare payload for async-agent
-  //       const payload: any = {
-  //         prompt: prompt,
-  //         searchWorkflow: true,
-  //       };
+      try {
+        // Prepare payload for async-agent with fixed values
+        const payload = {
+          prompt: prompt,
+          searchWorkflow: true,
+          async: false,
+        };
 
-  //       // Include callId if provided
-  //       if (callId) {
-  //         payload.callId = callId;
-  //       }
+        // Create AbortController for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-  //       // Create AbortController for timeout
-  //       const controller = new AbortController();
-  //       const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+        // Call async-agent webhook
+        const response = await fetch(`${ASYNC_AGENT_BASE_URL}/webhooks/prompt`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
 
-  //       // Call async-agent webhook
-  //       const response = await fetch(`${ASYNC_AGENT_BASE_URL}/webhooks/prompt`, {
-  //         method: 'POST',
-  //         headers: {
-  //           'Content-Type': 'application/json',
-  //         },
-  //         body: JSON.stringify(payload),
-  //         signal: controller.signal,
-  //       });
+        clearTimeout(timeoutId);
 
-  //       clearTimeout(timeoutId);
+        if (!response.ok) {
+          const errorText = await response.text();
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Async-agent error (${response.status}): ${errorText}`,
+              },
+            ],
+            isError: true,
+          };
+        }
 
-  //       if (!response.ok) {
-  //         const errorText = await response.text();
-  //         return {
-  //           content: [
-  //             {
-  //               type: 'text',
-  //               text: `Async-agent error (${response.status}): ${errorText}`,
-  //             },
-  //           ],
-  //           isError: true,
-  //         };
-  //       }
+        const data = await response.json();
 
-  //       const data = await response.json();
+        // Return formatted response
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(data, null, 2),
+            },
+          ],
+        };
+      } catch (error: any) {
+        if (error.name === 'AbortError') {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Async-agent timeout: Request exceeded ${TIMEOUT_MS / 1000} seconds`,
+              },
+            ],
+            isError: true,
+          };
+        }
 
-  //       // Return formatted response
-  //       return {
-  //         content: [
-  //           {
-  //             type: 'text',
-  //             text: JSON.stringify(data, null, 2),
-  //           },
-  //         ],
-  //       };
-  //     } catch (error: any) {
-  //       if (error.name === 'AbortError') {
-  //         return {
-  //           content: [
-  //             {
-  //               type: 'text',
-  //               text: `Async-agent timeout: Request exceeded ${TIMEOUT_MS / 1000} seconds`,
-  //             },
-  //           ],
-  //           isError: true,
-  //         };
-  //       }
-
-  //       return {
-  //         content: [
-  //           {
-  //             type: 'text',
-  //             text: `Async-agent error: ${error.message || String(error)}`,
-  //           },
-  //         ],
-  //         isError: true,
-  //       };
-  //     }
-  //   }
-  // );
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Async-agent error: ${error.message || String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
 
   // ==========================================
   // 6. FINANCIAL TOOLS
